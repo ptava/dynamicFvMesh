@@ -26,7 +26,7 @@ License
 
 \*---------------------------------------------------------------------------*/
 
-#include "dynamicRefineFvMesh.H"
+#include "mydynamicRefineFvMesh.H"
 #include "addToRunTimeSelectionTable.H"
 #include "surfaceInterpolate.H"
 #include "volFields.H"
@@ -37,19 +37,23 @@ License
 #include "sigFpe.H"
 #include "cellSet.H"
 #include "HashOps.H"
+#include "Pstream.H"
+#include "ListListOps.H"
+#include "globalIndex.H"
+
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
 
 namespace Foam
 {
-    defineTypeNameAndDebug(dynamicRefineFvMesh, 0);
-    addToRunTimeSelectionTable(dynamicFvMesh, dynamicRefineFvMesh, IOobject);
-    addToRunTimeSelectionTable(dynamicFvMesh, dynamicRefineFvMesh, doInit);
+    defineTypeNameAndDebug(mydynamicRefineFvMesh, 0);
+    addToRunTimeSelectionTable(dynamicFvMesh, mydynamicRefineFvMesh, IOobject);
+    addToRunTimeSelectionTable(dynamicFvMesh, mydynamicRefineFvMesh, doInit);
 }
 
 // * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
 
-void Foam::dynamicRefineFvMesh::calculateProtectedCells
+void Foam::mydynamicRefineFvMesh::calculateProtectedCells
 (
     bitSet& unrefineableCell
 ) const
@@ -163,7 +167,7 @@ void Foam::dynamicRefineFvMesh::calculateProtectedCells
 }
 
 
-void Foam::dynamicRefineFvMesh::readDict()
+void Foam::mydynamicRefineFvMesh::readDict()
 {
     const dictionary refineDict
     (
@@ -194,7 +198,7 @@ void Foam::dynamicRefineFvMesh::readDict()
 }
 
 
-void Foam::dynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
+void Foam::mydynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
 {
     //dynamicFvMesh::mapFields(mpm);
     dynamicMotionSolverListFvMesh::mapFields(mpm);
@@ -440,7 +444,7 @@ void Foam::dynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
 
 // Refines cells, maps fields and recalculates (an approximate) flux
 Foam::autoPtr<Foam::mapPolyMesh>
-Foam::dynamicRefineFvMesh::refine
+Foam::mydynamicRefineFvMesh::refine
 (
     const labelList& cellsToRefine
 )
@@ -535,7 +539,7 @@ Foam::dynamicRefineFvMesh::refine
 
 
 Foam::autoPtr<Foam::mapPolyMesh>
-Foam::dynamicRefineFvMesh::unrefine
+Foam::mydynamicRefineFvMesh::unrefine
 (
     const labelList& splitPoints
 )
@@ -716,7 +720,7 @@ Foam::dynamicRefineFvMesh::unrefine
 
 
 Foam::scalarField
-Foam::dynamicRefineFvMesh::maxPointField(const scalarField& pFld) const
+Foam::mydynamicRefineFvMesh::maxPointField(const scalarField& pFld) const
 {
     scalarField vFld(nCells(), -GREAT);
 
@@ -734,7 +738,7 @@ Foam::dynamicRefineFvMesh::maxPointField(const scalarField& pFld) const
 
 
 Foam::scalarField
-Foam::dynamicRefineFvMesh::maxCellField(const volScalarField& vFld) const
+Foam::mydynamicRefineFvMesh::maxCellField(const volScalarField& vFld) const
 {
     scalarField pFld(nPoints(), -GREAT);
 
@@ -752,7 +756,7 @@ Foam::dynamicRefineFvMesh::maxCellField(const volScalarField& vFld) const
 
 
 Foam::scalarField
-Foam::dynamicRefineFvMesh::cellToPoint(const scalarField& vFld) const
+Foam::mydynamicRefineFvMesh::cellToPoint(const scalarField& vFld) const
 {
     scalarField pFld(nPoints());
 
@@ -771,7 +775,7 @@ Foam::dynamicRefineFvMesh::cellToPoint(const scalarField& vFld) const
 }
 
 
-Foam::scalarField Foam::dynamicRefineFvMesh::error
+Foam::scalarField Foam::mydynamicRefineFvMesh::error
 (
     const scalarField& fld,
     const scalar minLevel,
@@ -793,12 +797,13 @@ Foam::scalarField Foam::dynamicRefineFvMesh::error
 }
 
 
-void Foam::dynamicRefineFvMesh::selectRefineCandidates
+void Foam::mydynamicRefineFvMesh::selectRefineCandidates
 (
     const scalar lowerRefineLevel,
     const scalar upperRefineLevel,
     const scalarField& vFld,
-    bitSet& candidateCell
+    bitSet& candidateCell,
+    SortableList<scalar>& allCellError
 ) const
 {
     // Get error per cell. Is -1 (not to be refined) to >0 (to be refined,
@@ -824,14 +829,31 @@ void Foam::dynamicRefineFvMesh::selectRefineCandidates
             candidateCell.set(celli);
         }
     }
+
+    // Create lists of list with size equal to number of processors
+    scalarListList gatheredError(Pstream::nProcs());
+
+    // Gather cellError on master processor
+    gatheredError[Pstream::myProcNo()].transfer(cellError);
+    Pstream::gatherList(gatheredError);
+    Pstream::scatterList(gatheredError);
+
+    // Collect all gathered errors and sort
+    allCellError = ListListOps::combine<scalarList>
+    (
+        gatheredError, accessOp<scalarList>()
+    );
+    gatheredError.clear();
+    allCellError.reverseSort();
 }
 
 
-Foam::labelList Foam::dynamicRefineFvMesh::selectRefineCells
+Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
 (
     const label maxCells,
     const label maxRefinement,
-    const bitSet& candidateCell
+    const bitSet& candidateCell,
+    const SortableList<scalar>& allCellError
 ) const
 {
     // Every refined cell causes 7 extra cells
@@ -867,24 +889,57 @@ Foam::labelList Foam::dynamicRefineFvMesh::selectRefineCells
     }
     else
     {
-        // Sort by error? For now just truncate.
-        for (label level = 0; level < maxRefinement; ++level)
+        // Sort by error
+        if(Pstream::parRun())
         {
-            for (const label celli : candidateCell)
+            globalIndex globalNumbering(nCells());
+            List<label> globalcell;
+            
+            for(label i = 0; i <= nTotToRefine; ++i)
             {
+                const label& index = allCellError.indices()[i];
+                label proci = globalNumbering.whichProcID(index);
+				if
+			    (
+					proci == Pstream::myProcNo()
+		         	// && globalNumbering.isLocal(index)
+			    )
+                {
+                    label celli = globalNumbering.toLocal(index);
+
+                    if
+                    (
+                        (!unrefineableCell.test(celli))
+                     && cellLevel[celli] < maxRefinement
+                    )
+                    {
+                        candidates.append(celli);
+                    }
+                    else
+                    {
+                        nTotToRefine ++;
+                    }
+                }
+            }
+        }
+        else
+        {
+            for(label i = 0; i<= nTotToRefine; ++i)
+            {
+                const label& celli = allCellError.indices()[i];
+
                 if
                 (
                     (!unrefineableCell.test(celli))
-                 && cellLevel[celli] == level
+                 && cellLevel[celli] < maxRefinement
                 )
                 {
                     candidates.append(celli);
                 }
-            }
-
-            if (returnReduce(candidates.size(), sumOp<label>()) > nTotToRefine)
-            {
-                break;
+                else
+                {
+                    nTotToRefine++;
+                }
             }
         }
     }
@@ -907,7 +962,7 @@ Foam::labelList Foam::dynamicRefineFvMesh::selectRefineCells
 }
 
 
-Foam::labelList Foam::dynamicRefineFvMesh::selectUnrefinePoints
+Foam::labelList Foam::mydynamicRefineFvMesh::selectUnrefinePoints
 (
     const scalar unrefineLevel,
     const bitSet& markedCell,
@@ -1002,7 +1057,7 @@ Foam::labelList Foam::dynamicRefineFvMesh::selectUnrefinePoints
 }
 
 
-void Foam::dynamicRefineFvMesh::extendMarkedCells
+void Foam::mydynamicRefineFvMesh::extendMarkedCells
 (
     bitSet& markedCell
 ) const
@@ -1036,7 +1091,7 @@ void Foam::dynamicRefineFvMesh::extendMarkedCells
 }
 
 
-void Foam::dynamicRefineFvMesh::checkEightAnchorPoints
+void Foam::mydynamicRefineFvMesh::checkEightAnchorPoints
 (
     bitSet& protectedCell
 ) const
@@ -1081,7 +1136,7 @@ void Foam::dynamicRefineFvMesh::checkEightAnchorPoints
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
-Foam::dynamicRefineFvMesh::dynamicRefineFvMesh
+Foam::mydynamicRefineFvMesh::mydynamicRefineFvMesh
 (
     const IOobject& io,
     const bool doInit
@@ -1098,7 +1153,7 @@ Foam::dynamicRefineFvMesh::dynamicRefineFvMesh
 }
 
 
-bool Foam::dynamicRefineFvMesh::init(const bool doInit)
+bool Foam::mydynamicRefineFvMesh::init(const bool doInit)
 {
     if (doInit)
     {
@@ -1271,7 +1326,7 @@ bool Foam::dynamicRefineFvMesh::init(const bool doInit)
 
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
-bool Foam::dynamicRefineFvMesh::updateTopology()
+bool Foam::mydynamicRefineFvMesh::updateTopology()
 {
     // Re-read dictionary. Chosen since usually -small so trivial amount
     // of time compared to actual refinement. Also very useful to be able
@@ -1357,13 +1412,17 @@ bool Foam::dynamicRefineFvMesh::updateTopology()
         // Cells marked for refinement or otherwise protected from unrefinement.
         bitSet refineCell(nCells());
 
+        // Cells ordered by error
+        SortableList<scalar> sortedError;
+
         // Determine candidates for refinement (looking at field only)
         selectRefineCandidates
         (
             lowerRefineLevel,
             upperRefineLevel,
             vFld,
-            refineCell
+            refineCell,
+            sortedError
         );
 
         if (globalData().nTotalCells() < maxCells)
@@ -1376,7 +1435,8 @@ bool Foam::dynamicRefineFvMesh::updateTopology()
                 (
                     maxCells,
                     maxRefinement,
-                    refineCell
+                    refineCell,
+                    sortedError
                 )
             );
 
@@ -1465,17 +1525,19 @@ bool Foam::dynamicRefineFvMesh::updateTopology()
 }
 
 
-bool Foam::dynamicRefineFvMesh::update()
+bool Foam::mydynamicRefineFvMesh::update()
 {
     bool hasChanged = updateTopology();
     // Do any mesh motion (resets mesh.moving() if it does any mesh motion)
     hasChanged = dynamicMotionSolverListFvMesh::update() && hasChanged;
+    // ?? Maybe wrong TO DO
+    // hasChanged = updateTopology() || dynamicMotionSolverListFvMesh::update();
 
     return hasChanged;
 }
 
 
-bool Foam::dynamicRefineFvMesh::writeObject
+bool Foam::mydynamicRefineFvMesh::writeObject
 (
     IOstreamOption streamOpt,
     const bool writeOnProc

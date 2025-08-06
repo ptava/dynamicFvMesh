@@ -25,7 +25,7 @@ License
     along with OpenFOAM.  If not, see <http://www.gnu.org/licenses/>.
 
 Class
-    Foam::dynamicRefineFvMesh
+    Foam::mydynamicRefineFvMesh
 
 Description
     A fvMesh with built-in refinement.
@@ -68,17 +68,18 @@ Description
 
 
 SourceFiles
-    dynamicRefineFvMesh.C
+    mydynamicRefineFvMesh.C
 
 \*---------------------------------------------------------------------------*/
 
-#ifndef dynamicRefineFvMesh_H
-#define dynamicRefineFvMesh_H
+#ifndef mydynamicRefineFvMesh_H
+#define mydynamicRefineFvMesh_H
 
 //#include "dynamicFvMesh.H"
 #include "dynamicMotionSolverListFvMesh.H"
 #include "hexRef8.H"
 #include "bitSet.H"
+#include "SortableList.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -86,10 +87,10 @@ namespace Foam
 {
 
 /*---------------------------------------------------------------------------*\
-                     Class dynamicRefineFvMesh Declaration
+                     Class mydynamicRefineFvMesh Declaration
 \*---------------------------------------------------------------------------*/
 
-class dynamicRefineFvMesh
+class mydynamicRefineFvMesh
 :
     //public dynamicFvMesh
     public dynamicMotionSolverListFvMesh
@@ -162,7 +163,8 @@ protected:
                 const scalar lowerRefineLevel,
                 const scalar upperRefineLevel,
                 const scalarField& vFld,
-                bitSet& candidateCell
+                bitSet& candidateCell,
+                SortableList<scalar>& allCellError
             ) const;
 
             //- Subset candidate cells for refinement
@@ -170,7 +172,8 @@ protected:
             (
                 const label maxCells,
                 const label maxRefinement,
-                const bitSet& candidateCell
+                const bitSet& candidateCell,
+                const SortableList<scalar>& allCellError
             ) const;
 
             //- Select points that can be unrefined.
@@ -219,21 +222,21 @@ protected:
 private:
 
         //- No copy construct
-        dynamicRefineFvMesh(const dynamicRefineFvMesh&) = delete;
+        mydynamicRefineFvMesh(const mydynamicRefineFvMesh&) = delete;
 
         //- No copy assignment
-        void operator=(const dynamicRefineFvMesh&) = delete;
+        void operator=(const mydynamicRefineFvMesh&) = delete;
 
 public:
 
     //- Runtime type information
-    TypeName("dynamicRefineFvMesh");
+    TypeName("mydynamicRefineFvMesh");
 
 
     // Constructors
 
         //- Construct from IOobject
-        explicit dynamicRefineFvMesh
+        explicit mydynamicRefineFvMesh
         (
             const IOobject& io,
             const bool doInit=true
@@ -241,7 +244,7 @@ public:
 
 
     //- Destructor
-    virtual ~dynamicRefineFvMesh() = default;
+    virtual ~mydynamicRefineFvMesh() = default;
 
 
     // Member Functions
@@ -291,7 +294,7 @@ public:
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 #ifdef NoRepository
-    #include "dynamicRefineFvMeshTemplates.C"
+    #include "mydynamicRefineFvMeshTemplates.C"
 #endif
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
