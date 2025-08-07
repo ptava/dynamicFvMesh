@@ -722,6 +722,14 @@ Foam::mydynamicRefineFvMesh::unrefine
 Foam::scalarField
 Foam::mydynamicRefineFvMesh::maxPointField(const scalarField& pFld) const
 {
+    scalarField pFldSync(pFld);
+    syncTools::syncPointList
+    (
+        *this,
+        pFldSync,
+        maxEqOp<scalar>(),
+        -GREAT
+    );
     scalarField vFld(nCells(), -GREAT);
 
     forAll(pointCells(), pointi)
@@ -730,7 +738,7 @@ Foam::mydynamicRefineFvMesh::maxPointField(const scalarField& pFld) const
 
         for (const label celli : pCells)
         {
-            vFld[celli] = max(vFld[celli], pFld[pointi]);
+            vFld[celli] = max(vFld[celli], pFldSync[pointi]);
         }
     }
     return vFld;
@@ -751,6 +759,15 @@ Foam::mydynamicRefineFvMesh::maxCellField(const volScalarField& vFld) const
             pFld[pointi] = max(pFld[pointi], vFld[celli]);
         }
     }
+
+    syncTools::syncPointList
+    (
+        *this,
+        pFld,
+        maxEqOp<scalar>(),
+        -GREAT
+    );
+
     return pFld;
 }
 
@@ -758,19 +775,40 @@ Foam::mydynamicRefineFvMesh::maxCellField(const volScalarField& vFld) const
 Foam::scalarField
 Foam::mydynamicRefineFvMesh::cellToPoint(const scalarField& vFld) const
 {
-    scalarField pFld(nPoints());
+    scalarField pFld(nPoints(), 0.0);
+    scalarField pWeight(nPoints(), 0.0);
 
     forAll(pointCells(), pointi)
     {
         const labelList& pCells = pointCells()[pointi];
 
-        scalar sum = 0.0;
         for (const label celli : pCells)
         {
-            sum += vFld[celli];
+            pFld[pointi] += vFld[celli];
         }
-        pFld[pointi] = sum/pCells.size();
+        pWeight[pointi] = pCells.size();
     }
+
+    syncTools::syncPointList
+    (
+        *this,
+        pFld,
+        plusEqOp<scalar>(),
+        0.0
+    );
+    syncTools::syncPointList
+    (
+        *this,
+        pWeight,
+        plusEqOp<scalar>(),
+        0.0
+    );
+
+    for(label pointi = 0; pointi < pFld.size(); ++pointi)
+    {
+        pFld[pointi] /= pWeight[pointi];
+    }
+
     return pFld;
 }
 
