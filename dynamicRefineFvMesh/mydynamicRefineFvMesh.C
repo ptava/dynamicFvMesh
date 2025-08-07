@@ -859,6 +859,12 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
     // Every refined cell causes 7 extra cells
     label nTotToRefine = (maxCells - globalData().nTotalCells()) / 7;
 
+    if (nTotToRefine <= 0)
+    {
+        Info<< "No cells to refine." << endl;
+        return labelList();
+    }
+
     const labelList& cellLevel = meshCutter_.cellLevel();
 
     // Mark cells that cannot be refined since they would trigger refinement
@@ -894,7 +900,7 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         {
             globalIndex globalNumbering(nCells());
             
-            for(label i = 0; i <= nTotToRefine; ++i)
+            for(label i = 0; i < nTotToRefine; ++i)
             {
                 const label& index = allCellError.indices()[i];
                 label proci = globalNumbering.whichProcID(index);
@@ -923,7 +929,7 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         }
         else
         {
-            for(label i = 0; i<= nTotToRefine; ++i)
+            for(label i = 0; i< nTotToRefine; ++i)
             {
                 const label& celli = allCellError.indices()[i];
 
