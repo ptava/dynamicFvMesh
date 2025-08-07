@@ -893,7 +893,6 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         if(Pstream::parRun())
         {
             globalIndex globalNumbering(nCells());
-            List<label> globalcell;
             
             for(label i = 0; i <= nTotToRefine; ++i)
             {
