@@ -5,6 +5,7 @@ Working on adaptive mesh refinement in OpenFOAM.
 - [x] Sort candidate cells for refinement based `cellError` *scalarField*.
 - [x] Support both single-processor and parallel runs by reconstructing `cellError` field.
 - [x] Stop refine cells once user-defined threshold is reached.
+- [ ] Add synchronization across processors to ensure consistency across boundaries.
 - [ ] Make available for processing the field used for refinement before and after smoothing.
 
 ---
@@ -45,17 +46,5 @@ In the latest OpenFOAM version, any cell with `cellError > 0` is considered a ca
 2. Distribute results with `Pstream::scatterList`.
 3. Combine into `SortableList` and sort (`reverseSort`).
 4. Select cells in sorted order until reaching `maxCells`.
-
----
-
-## Accuracy Issues in Interpolation
-
-`dynamicRefineFvMesh` applies:
-
-1. **cellToPoint**: Converts `volScalarField` to `pointField` (average cell values at points).
-2. **error**: Calculates min distance to limits for values between limits.
-3. **maxPointField**: Returns `cellError` *volScalarField* (max point value for each cell).
-
-If a point belongs to a processor patch, its `pointCells()` list is partial → accuracy loss. Correction is inefficient due to communication cost.
 
 ---
