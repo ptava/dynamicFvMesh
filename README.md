@@ -5,8 +5,8 @@ Working on adaptive mesh refinement in OpenFOAM.
 - [x] Sort candidate cells for refinement based `cellError` *scalarField*.
 - [x] Support both single-processor and parallel runs by reconstructing `cellError` field.
 - [x] Stop refine cells once user-defined threshold is reached.
-- [ ] Add synchronization across processors to ensure consistency across boundaries.
-- [ ] Make available for processing the field used for refinement before and after smoothing.
+- [x] Add synchronization across processors to ensure consistency across boundaries.
+- [ ] Make available for processing additional information on adaptive mesh refinement
 
 ---
 
