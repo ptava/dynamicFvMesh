@@ -40,6 +40,7 @@ License
 #include "Pstream.H"
 #include "ListListOps.H"
 #include "globalIndex.H"
+#include "uniformDimensionedFields.H"
 
 
 // * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
@@ -178,7 +179,7 @@ void Foam::mydynamicRefineFvMesh::readDict()
                 "dynamicMeshDict",
                 time().constant(),
                 *this,
-                IOobject::MUST_READ,
+                IOobject::MUST_READ_IF_MODIFIED,
                 IOobject::NO_WRITE,
                 IOobject::NO_REGISTER
             )
@@ -194,9 +195,8 @@ void Foam::mydynamicRefineFvMesh::readDict()
         correctFluxes_.insert(pr.first(), pr.second());
     }
 
-    refineDict.readEntry("dumpLevel", dumpLevel_);
+    refineDict.readEntry("dumpRefinementInfo", dumpRefinementInfo_);
 }
-
 
 void Foam::mydynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
 {
@@ -859,6 +859,30 @@ void Foam::mydynamicRefineFvMesh::selectRefineCandidates
         )
     );
 
+    // Store into registry cellError
+    if (dumpRefinementInfo_)
+    {
+        volScalarField ioCellError
+        (
+            IOobject
+            (
+                "cellError",
+                time().timeName(),
+                *this,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE,
+                IOobject::NO_REGISTER
+            ),
+            *this,
+            dimensionedScalar(dimless, Zero)
+        );
+
+        forAll(cellError, celli)
+        {
+            ioCellError[celli] = cellError[celli];
+        }
+    }
+
     // Mark cells that are candidates for refinement.
     forAll(cellError, celli)
     {
@@ -899,6 +923,10 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
 
     if (nTotToRefine <= 0)
     {
+        if (dumpRefinementInfo_)
+        {
+            setInfo("nTotToRefine", nTotToRefine);
+        }
         Info<< "No cells to refine." << endl;
         return labelList();
     }
@@ -997,9 +1025,20 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         )
     );
 
-    Info<< "Selected " << returnReduce(consistentSet.size(), sumOp<label>())
+    const label nTot = returnReduce(consistentSet.size(), sumOp<label>());
+
+    Info<< "Selected " << nTot
         << " cells for refinement out of " << globalData().nTotalCells()
         << "." << endl;
+
+    if (dumpRefinementInfo_)
+    {
+        const scalar upperLimit = allCellError[0];
+        const scalar lowerLimit = allCellError[nTot-1];
+        setInfo("nTotToRefine", nTot);
+        setInfo("upperLimit", upperLimit);
+        setInfo("lowerLimit", lowerLimit);
+    }
 
     return consistentSet;
 }
@@ -1091,10 +1130,18 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectUnrefinePoints
             false
         )
     );
-    Info<< "Selected " << returnReduce(consistentSet.size(), sumOp<label>())
+
+    const label nTot = returnReduce(consistentSet.size(), sumOp<label>());
+
+    Info<< "Selected " << nTot
         << " split points out of a possible "
         << returnReduce(splitPoints.size(), sumOp<label>())
         << "." << endl;
+
+    if (dumpRefinementInfo_)
+    {
+        setInfo("nTotToUnrefine", nTot);
+    }
 
     return consistentSet;
 }
@@ -1207,11 +1254,10 @@ bool Foam::mydynamicRefineFvMesh::init(const bool doInit)
 
     protectedCell_.setSize(nCells());
     nRefinementIterations_ = 0;
-    dumpLevel_ = false;
+    dumpRefinementInfo_ = false;
 
     // Read static part of dictionary
     readDict();
-
 
     const labelList& cellLevel = meshCutter_.cellLevel();
     const labelList& pointLevel = meshCutter_.pointLevel();
@@ -1432,7 +1478,7 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
         {
             FatalErrorInFunction
                 << "Illegal maximum refinement level " << maxRefinement << nl
-                << "The maxCells setting in the dynamicMeshDict should"
+                << "The maxRefinement setting in the dynamicMeshDict should"
                 << " be > 0." << nl
                 << exit(FatalError);
         }
@@ -1573,8 +1619,6 @@ bool Foam::mydynamicRefineFvMesh::update()
     bool hasChanged = updateTopology();
     // Do any mesh motion (resets mesh.moving() if it does any mesh motion)
     hasChanged = dynamicMotionSolverListFvMesh::update() && hasChanged;
-    // ?? Maybe wrong TO DO
-    // hasChanged = updateTopology() || dynamicMotionSolverListFvMesh::update();
 
     return hasChanged;
 }
@@ -1596,7 +1640,7 @@ bool Foam::mydynamicRefineFvMesh::writeObject
      && meshCutter_.write(writeOnProc)
     );
 
-    if (dumpLevel_)
+    if (dumpRefinementInfo_)
     {
         volScalarField scalarCellLevel
         (

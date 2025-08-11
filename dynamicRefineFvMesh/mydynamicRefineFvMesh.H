@@ -61,8 +61,9 @@ Description
             (ghf none)  //NaN)   //none)
         );
 
-        // Write the refinement level as a volScalarField
-        dumpLevel       true;
+        // Write the refinement level as a volScalarField and makes available
+        // to function objects 'nTotToRefine', 'lowerLimit', and 'upperLimit'
+        dumpRefinementInfo       true;
     }
     \endverbatim
 
@@ -109,8 +110,9 @@ protected:
         //- Number of refinement/unrefinement steps done so far.
         label nRefinementIterations_;
 
-        //- Dump cellLevel for post-processing
-        bool dumpLevel_;
+        //- Dump processing info (cell level, field after smoothing, maximum
+        //  field value among candidate cells, and number of cells refined)
+        bool dumpRefinementInfo_;
 
 
     // Protected Member Functions
@@ -122,6 +124,12 @@ protected:
         //- Read the projection parameters from dictionary
         void readDict();
 
+        //- Store runtime information for function objects access
+        template <class T>
+        inline void setInfo(
+            const word& name,
+            const T& value
+        ) const;
 
         //- Refine cells. Update mesh and fields.
         virtual autoPtr<mapPolyMesh> refine(const labelList&);

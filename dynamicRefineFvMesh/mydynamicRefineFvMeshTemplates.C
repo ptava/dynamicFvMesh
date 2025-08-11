@@ -182,5 +182,37 @@ void Foam::mydynamicRefineFvMesh::mapNewInternalFaces
     }
 }
 
-
+template<class T>
+inline void Foam::mydynamicRefineFvMesh::setInfo
+(
+    const word& name,
+    const T& value
+) const
+{
+    if (foundObject<uniformDimensionedScalarField>(name))
+    {
+        auto& fld = const_cast<uniformDimensionedScalarField&>(
+            lookupObject<uniformDimensionedScalarField>(name)
+        );
+        fld.value() = value;
+    }
+    else
+    {
+        thisDb().store
+        (
+            new uniformDimensionedScalarField
+            (
+                IOobject
+                (
+                    name,
+                    time().timeName(),
+                    thisDb(),
+                    IOobject::NO_READ,
+                    IOobject::NO_WRITE
+                ),
+                dimensionedScalar(name, dimless, value)
+            )
+        );
+    }
+}
 // ************************************************************************* //
