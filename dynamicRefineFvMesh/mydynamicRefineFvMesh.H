@@ -61,8 +61,12 @@ Description
             (ghf none)  //NaN)   //none)
         );
 
-        // Write the refinement level as a volScalarField and makes available
-        // to function objects 'nTotToRefine', 'lowerLimit', and 'upperLimit'
+        // Write the refinement level as a volScalarField
+        dumpLevel       true;
+
+        // Write "error" as a volScalarField before and after smoothing
+        // and store on registry 'nTotToRefine', 'nTotRefined', 'lowerLimit',
+        // and 'upperLimit'
         dumpRefinementInfo       true;
     }
     \endverbatim
@@ -110,9 +114,18 @@ protected:
         //- Number of refinement/unrefinement steps done so far.
         label nRefinementIterations_;
 
-        //- Dump processing info (cell level, field after smoothing, maximum
-        //  field value among candidate cells, and number of cells refined)
+        //- Dump cellLevel for post-processing
+        bool dumpLevel_;
+
+        //- Dump processing info (number of selectable cells, maximum/minimum
+        //  "cellError", number of selected cells
         bool dumpRefinementInfo_;
+
+        //- cellError before smoothing
+        mutable autoPtr<volScalarField> cellError_;
+
+        //- cellError after smoothing
+        mutable autoPtr<volScalarField> expectedCellError_;
 
 
     // Protected Member Functions
@@ -124,8 +137,22 @@ protected:
         //- Read the projection parameters from dictionary
         void readDict();
 
-        //- Store runtime information for function objects access
-        template <class T>
+        //- Initialise fields for dumping refinement information
+        void makeDumpField
+        (
+            autoPtr<volScalarField>& fld,
+            const word& name
+        ) const;
+
+        //- Setters: assign computed values
+        template<autoPtr<volScalarField> mydynamicRefineFvMesh::* MemberPtr>
+        inline void setDumpField
+        (
+            const scalarField& vals,
+            const word& name
+        ) const;
+
+        template<class T>
         inline void setInfo(
             const word& name,
             const T& value

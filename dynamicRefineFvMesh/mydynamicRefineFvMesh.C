@@ -29,7 +29,6 @@ License
 #include "mydynamicRefineFvMesh.H"
 #include "addToRunTimeSelectionTable.H"
 #include "surfaceInterpolate.H"
-#include "volFields.H"
 #include "polyTopoChange.H"
 #include "surfaceFields.H"
 #include "syncTools.H"
@@ -195,7 +194,36 @@ void Foam::mydynamicRefineFvMesh::readDict()
         correctFluxes_.insert(pr.first(), pr.second());
     }
 
+    refineDict.readEntry("dumpLevel", dumpLevel_);
     refineDict.readEntry("dumpRefinementInfo", dumpRefinementInfo_);
+}
+
+void Foam::mydynamicRefineFvMesh::makeDumpField
+(
+    autoPtr<volScalarField>& fld,
+    const word& name
+) const
+{
+    const bool needCreate = !fld.valid() || (fld->size() != this->nCells());
+
+    if (!needCreate) return;
+
+    fld.reset
+    (
+        new volScalarField
+        (
+            IOobject
+            (
+                name,
+                time().timeName(),
+                thisDb(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            *this,
+            dimensionedScalar(dimless, Zero)
+        )
+    );
 }
 
 void Foam::mydynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
@@ -862,25 +890,26 @@ void Foam::mydynamicRefineFvMesh::selectRefineCandidates
     // Store into registry cellError
     if (dumpRefinementInfo_)
     {
-        volScalarField ioCellError
+        scalarField expectedCellError
         (
-            IOobject
+            error
             (
-                "cellError",
-                time().timeName(),
-                *this,
-                IOobject::NO_READ,
-                IOobject::NO_WRITE,
-                IOobject::NO_REGISTER
-            ),
-            *this,
-            dimensionedScalar(dimless, Zero)
+                vFld,
+                lowerRefineLevel,
+                upperRefineLevel
+            )
         );
 
-        forAll(cellError, celli)
-        {
-            ioCellError[celli] = cellError[celli];
-        }
+        setDumpField<&mydynamicRefineFvMesh::cellError_>
+        (
+            cellError,
+            "cellError"
+        );
+        setDumpField<&mydynamicRefineFvMesh::expectedCellError_>
+        (
+            expectedCellError,
+            "expectedCellError"
+        );
     }
 
     // Mark cells that are candidates for refinement.
@@ -921,12 +950,13 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
     // Every refined cell causes 7 extra cells
     label nTotToRefine = (maxCells - globalData().nTotalCells()) / 7;
 
+    if (dumpRefinementInfo_)
+    {
+        setInfo("nTotToRefine", nTotToRefine);
+    }
+
     if (nTotToRefine <= 0)
     {
-        if (dumpRefinementInfo_)
-        {
-            setInfo("nTotToRefine", nTotToRefine);
-        }
         Info<< "No cells to refine." << endl;
         return labelList();
     }
@@ -1035,7 +1065,7 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
     {
         const scalar upperLimit = allCellError[0];
         const scalar lowerLimit = allCellError[nTot-1];
-        setInfo("nTotToRefine", nTot);
+        setInfo("nTotRefined", nTot);
         setInfo("upperLimit", upperLimit);
         setInfo("lowerLimit", lowerLimit);
     }
@@ -1254,6 +1284,7 @@ bool Foam::mydynamicRefineFvMesh::init(const bool doInit)
 
     protectedCell_.setSize(nCells());
     nRefinementIterations_ = 0;
+    dumpLevel_ = false;
     dumpRefinementInfo_ = false;
 
     // Read static part of dictionary
@@ -1640,7 +1671,7 @@ bool Foam::mydynamicRefineFvMesh::writeObject
      && meshCutter_.write(writeOnProc)
     );
 
-    if (dumpRefinementInfo_)
+    if (dumpLevel_)
     {
         volScalarField scalarCellLevel
         (
@@ -1665,6 +1696,11 @@ bool Foam::mydynamicRefineFvMesh::writeObject
         }
 
         writeOk = writeOk && scalarCellLevel.write();
+    }
+
+    if (dumpRefinementInfo_)
+    {
+        writeOk = writeOk && cellError_->write() && expectedCellError_->write();
     }
 
     return writeOk;

@@ -26,6 +26,7 @@ License
 \*---------------------------------------------------------------------------*/
 
 #include "surfaceFields.H"
+#include "volFields.H"
 
 // * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
 
@@ -214,5 +215,32 @@ inline void Foam::mydynamicRefineFvMesh::setInfo
             )
         );
     }
+}
+
+template<Foam::autoPtr<Foam::volScalarField> Foam::mydynamicRefineFvMesh::* MemberPtr>
+inline void Foam::mydynamicRefineFvMesh::setDumpField(
+    const scalarField& vals,
+    const word& name
+) const
+{
+    // Sanity check
+    if (vals.size() != nCells())
+    {
+        FatalErrorInFunction
+            << "Size mismatch for field '" << name << "': vals.size() = "
+            << vals.size() << " vs nCells() = " << nCells()
+            << exit(FatalError);
+    }
+
+    // Resolve member pointer to actual autoPtr
+    autoPtr<volScalarField>& fld = const_cast<autoPtr<volScalarField>&>(
+        this->*MemberPtr
+    );
+
+    // Ensure field exists and matches current mesh
+    makeDumpField(fld, name);
+
+    // Assign internal values
+    fld->primitiveFieldRef() = vals;
 }
 // ************************************************************************* //

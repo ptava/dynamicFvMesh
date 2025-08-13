@@ -30,6 +30,7 @@ Before smoothing, the code evaluates the **`cellError` scalarField**:
 
 - `cellError` is the minimum distance between the range limits and the cell value.
 - It approaches 0 for interpolated values near the limits, and its maximum in the mid-region of the specified range.
+- It can be computed before and after smoothing operation (`field-` and `field+`).
 
 In the latest OpenFOAM version, any cell with `cellError > 0` is considered a candidate for refinement.  
 **Problem**: All candidates are treated equally, ignoring the magnitude of `cellError`.  
@@ -48,3 +49,13 @@ In the latest OpenFOAM version, any cell with `cellError > 0` is considered a ca
 4. Select cells in sorted order until reaching `maxCells`.
 
 ---
+
+## Additional info stored and written
+
+If `dumpRefinementInfo` is set to `true` in the `dynamicMeshDict`, the following information will be stored in the registry each refinement step:
+- `volScalarField` `field-` -> `expectedCellError`
+- `volScalarField` `field+` -> `cellError`
+- number of cells selectable for refinement with `cellError > 0` -> `nTotToRefine`
+- number of cells selected for refinement -> `nTotRefined`
+- maximum `cellError` value among selected cells -> `upperLimit`
+- minimum `cellError` value among selected cells -> `lowerLimit`
