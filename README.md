@@ -6,7 +6,7 @@ Working on adaptive mesh refinement in OpenFOAM.
 - [x] Support both single-processor and parallel runs by reconstructing `cellError` field.
 - [x] Stop refine cells once user-defined threshold is reached.
 - [x] Add synchronization across processors to ensure consistency across boundaries.
-- [ ] Make available for processing additional information on adaptive mesh refinement
+- [x] Make available for processing additional information on adaptive mesh refinement
 
 ---
 
