@@ -7,6 +7,8 @@ Working on adaptive mesh refinement in OpenFOAM.
 - [x] Stop refine cells once user-defined threshold is reached.
 - [x] Add synchronization across processors to ensure consistency across boundaries.
 - [x] Make available for processing additional information on adaptive mesh refinement
+- [x] Introduce a user-defined time-based smoothing to gradually ramp in cell refinement at startup.
+
 
 ---
 
@@ -52,10 +54,35 @@ In the latest OpenFOAM version, any cell with `cellError > 0` is considered a ca
 
 ## Additional info stored and written
 
-If `dumpRefinementInfo` is set to `true` in the `dynamicMeshDict`, the following information will be stored in the registry each refinement step:
+Expose a new flag in the `dynamicMeshDict` called `dumpRefinementInfo`. If `dumpRefinementInfo` is set to `true` in the `dynamicMeshDict`, the following information will be stored in the registry each refinement step:
 - `volScalarField` `field-` -> `expectedCellError`
 - `volScalarField` `field+` -> `cellError`
 - number of cells selectable for refinement with `cellError > 0` -> `nTotToRefine`
 - number of cells selected for refinement -> `nTotRefined`
 - maximum `cellError` value among selected cells -> `upperLimit`
 - minimum `cellError` value among selected cells -> `lowerLimit`
+
+    mydynamicRefineFvMeshCoeffs
+    {
+        // ...
+        dumpRefinementInfo true;
+    }
+
+---
+
+## Startup Smoothing
+
+Expose a time-dependent parameter $γ(t)∈[0,1]γ(t)∈[0,1]$ in the `dynamicMeshDict` called `refineScale` (*Funtion1*). At each step, scale the target number of cells to refine by $γ(t)$. Early in the run $γ≈0 ⇒$ very few (or none) are added; later $γ→1 ⇒$ full refinement kicks in.
+
+The new parameter prevents sudden mesh explosions at the beginning of a run; new cells are introduced smoothly as its value rises.
+
+    mydynamicRefineFvMeshCoeffs
+    {
+        // ...
+        refineScale
+        {
+            type        table;      // any Function1
+            outOfBounds clamp;
+            values      ((0 0) (0.1 0.3) (0.25 1));
+        }
+    }
