@@ -68,6 +68,15 @@ Description
         // and store on registry 'nTotToRefine', 'nTotRefined', 'lowerLimit',
         // and 'upperLimit'
         dumpRefinementInfo       true;
+
+        // Scale function for cells refinement (e.g., for startup)
+        refineScale
+        {
+            type            table;
+            outOfBounds     clamp;
+            values          ((0 0) (0.1 0.3) (0.25 1));
+        }
+
     }
     \endverbatim
 
@@ -85,6 +94,7 @@ SourceFiles
 #include "hexRef8.H"
 #include "bitSet.H"
 #include "SortableList.H"
+#include "Function1.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -127,6 +137,9 @@ protected:
         //- cellError after smoothing
         mutable autoPtr<volScalarField> expectedCellError_;
 
+        //- Scale function for cells refinement (e.g., for startup)
+        mutable autoPtr<Function1<scalar>> refineScale_;
+
 
     // Protected Member Functions
 
@@ -157,6 +170,9 @@ protected:
             const word& name,
             const T& value
         ) const;
+
+        // Current scale value
+        scalar currentScale() const;
 
         //- Refine cells. Update mesh and fields.
         virtual autoPtr<mapPolyMesh> refine(const labelList&);
@@ -208,7 +224,8 @@ protected:
                 const label maxCells,
                 const label maxRefinement,
                 const bitSet& candidateCell,
-                const SortableList<scalar>& allCellError
+                const SortableList<scalar>& allCellError,
+                const scalar scale
             ) const;
 
             //- Select points that can be unrefined.

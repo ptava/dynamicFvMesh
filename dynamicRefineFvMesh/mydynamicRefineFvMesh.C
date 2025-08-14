@@ -196,6 +196,14 @@ void Foam::mydynamicRefineFvMesh::readDict()
 
     refineDict.readEntry("dumpLevel", dumpLevel_);
     refineDict.readEntry("dumpRefinementInfo", dumpRefinementInfo_);
+
+    if (refineDict.found("refineScale"))
+    {
+        refineScale_.reset
+        (
+            Function1<scalar>::New("refineScale", refineDict).ptr()
+        );
+    }
 }
 
 void Foam::mydynamicRefineFvMesh::makeDumpField
@@ -224,6 +232,23 @@ void Foam::mydynamicRefineFvMesh::makeDumpField
             dimensionedScalar(dimless, Zero)
         )
     );
+}
+
+Foam::scalar Foam::mydynamicRefineFvMesh::currentScale() const
+{
+    if (!refineScale_.valid()) return 1.0;
+
+    const scalar scale = refineScale_->value(time().value());
+
+    if (scale < 0.0 || scale > 1.0)
+    {
+        FatalErrorInFunction
+            << "Refinement scale must be between 0 and 1" << endl
+            << "    Current value: " << scale << endl
+            << abort(FatalError);
+    }
+
+    return scale;
 }
 
 void Foam::mydynamicRefineFvMesh::mapFields(const mapPolyMesh& mpm)
@@ -944,7 +969,8 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
     const label maxCells,
     const label maxRefinement,
     const bitSet& candidateCell,
-    const SortableList<scalar>& allCellError
+    const SortableList<scalar>& allCellError,
+    const scalar scale
 ) const
 {
     // Every refined cell causes 7 extra cells
@@ -1054,6 +1080,21 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
             true               // Add to set to guarantee 2:1
         )
     );
+
+    // remove cells based on scale funvtion value
+    if (scale != 1.0 && !consistentSet.empty())
+    {
+        // The scale value represents the percentage of cells to keep
+        // remove cells from teh bottom
+        label nToExclude = static_cast<label>(
+            consistentSet.size() * (1.0 - scale)
+        );
+
+        if (nToExclude > 0)
+        {
+            consistentSet.resize(consistentSet.size() - nToExclude);
+        }
+    }
 
     const label nTot = returnReduce(consistentSet.size(), sumOp<label>());
 
@@ -1547,8 +1588,11 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
 
         if (globalData().nTotalCells() < maxCells)
         {
+            // Get current scale
+            scalar scale = currentScale();
+
             // Select subset of candidates. Take into account max allowable
-            // cells, refinement level, protected cells.
+            // cells, refinement level, protected cells, and scale function.
             labelList cellsToRefine
             (
                 selectRefineCells
@@ -1556,7 +1600,8 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
                     maxCells,
                     maxRefinement,
                     refineCell,
-                    sortedError
+                    sortedError,
+                    scale
                 )
             );
 
