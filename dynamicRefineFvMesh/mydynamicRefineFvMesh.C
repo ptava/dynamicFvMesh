@@ -1026,11 +1026,7 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
             {
                 const label& index = allCellError.indices()[i];
                 label proci = globalNumbering.whichProcID(index);
-				if
-			    (
-					proci == Pstream::myProcNo()
-		         	// && globalNumbering.isLocal(index)
-			    )
+				if (proci == Pstream::myProcNo())
                 {
                     label celli = globalNumbering.toLocal(index);
 
@@ -1071,7 +1067,23 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         }
     }
 
-    // Guarantee 2:1 refinement after refinement
+    // remove cells based on scale funvtion value
+    // to this before consistentSet is created
+    if (scale != 1.0 && !candidates.empty())
+    {
+        // The scale value represents the percentage of cells to keep
+        // remove cells from teh bottom
+        label nToExclude = static_cast<label>(
+            candidates.size() * (1.0 - scale)
+        );
+
+        if (nToExclude > 0)
+        {
+            candidates.resize(candidates.size() - nToExclude);
+        }
+    }
+
+    // Guarantee 2:1 refinement after refinement9*
     labelList consistentSet
     (
         meshCutter_.consistentRefinement
@@ -1081,20 +1093,6 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         )
     );
 
-    // remove cells based on scale funvtion value
-    if (scale != 1.0 && !consistentSet.empty())
-    {
-        // The scale value represents the percentage of cells to keep
-        // remove cells from teh bottom
-        label nToExclude = static_cast<label>(
-            consistentSet.size() * (1.0 - scale)
-        );
-
-        if (nToExclude > 0)
-        {
-            consistentSet.resize(consistentSet.size() - nToExclude);
-        }
-    }
 
     const label nTot = returnReduce(consistentSet.size(), sumOp<label>());
 
