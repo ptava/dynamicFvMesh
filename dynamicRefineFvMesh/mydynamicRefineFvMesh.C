@@ -248,6 +248,13 @@ Foam::scalar Foam::mydynamicRefineFvMesh::currentScale() const
             << abort(FatalError);
     }
 
+    if (debug)
+    {
+        DebugInfo
+            << "Refinement scale at time " << time().value()
+            << " = " << scale << endl;
+    }
+
     return scale;
 }
 
@@ -1083,7 +1090,7 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         }
     }
 
-    // Guarantee 2:1 refinement after refinement9*
+    // Guarantee 2:1 refinement after refinement
     labelList consistentSet
     (
         meshCutter_.consistentRefinement
@@ -1094,6 +1101,18 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
     );
 
 
+    const scalar upperLimit = returnReduce(
+        allCellError[0],
+        maxOp<scalar>()
+    );
+    const scalar lowerLimit = returnReduce(
+        allCellError[candidates.size()-1],
+        minOp<scalar>()
+    );
+
+    DebugInfo<< "Refinement level range: "
+        << "[" << lowerLimit << " - " << upperLimit << "]" << endl;
+
     const label nTot = returnReduce(consistentSet.size(), sumOp<label>());
 
     Info<< "Selected " << nTot
@@ -1102,8 +1121,6 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
 
     if (dumpRefinementInfo_)
     {
-        const scalar upperLimit = allCellError[0];
-        const scalar lowerLimit = allCellError[nTot-1];
         setInfo("nTotRefined", nTot);
         setInfo("upperLimit", upperLimit);
         setInfo("lowerLimit", lowerLimit);
@@ -1525,11 +1542,16 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
             << exit(FatalError);
     }
 
+    // Get current scale
+    scalar scale = currentScale();
 
     // Note: cannot refine at time 0 since no V0 present since mesh not
     //       moved yet.
+    // Note: do not refine if user specify so (i.e. scale == 0)
 
-    if (time().timeIndex() > 0 && time().timeIndex() % refineInterval == 0)
+
+    if (time().timeIndex() > 0 && time().timeIndex() % refineInterval == 0
+        && scale > 0)
     {
         const label maxCells = refineDict.get<label>("maxCells");
 
@@ -1592,9 +1614,6 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
 
         if (globalData().nTotalCells() < maxCells)
         {
-            // Get current scale
-            scalar scale = currentScale();
-
             // Select subset of candidates. Take into account max allowable
             // cells, refinement level, protected cells, and scale function.
             labelList cellsToRefine
