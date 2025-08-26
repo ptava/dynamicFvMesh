@@ -1525,6 +1525,14 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
 
     const label refineInterval = refineDict.get<label>("refineInterval");
 
+    if (refineDict.found("refineScale"))
+    {
+        refineScale_.reset
+        (
+            Function1<scalar>::New("refineScale", refineDict).ptr()
+        );
+    }
+
     bool hasChanged = false;
 
     if (refineInterval == 0)
@@ -1548,8 +1556,6 @@ bool Foam::mydynamicRefineFvMesh::updateTopology()
     // Note: cannot refine at time 0 since no V0 present since mesh not
     //       moved yet.
     // Note: do not refine if user specify so (i.e. scale == 0)
-
-
     if (time().timeIndex() > 0 && time().timeIndex() % refineInterval == 0
         && scale > 0)
     {
