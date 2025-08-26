@@ -648,10 +648,21 @@ Foam::mydynamicRefineFvMesh::unrefine
     // Create mesh (no inflation), return map from old to new mesh.
     autoPtr<mapPolyMesh> map = meshMod.changeMesh(*this, false);
 
-    Info<< "Unrefined from "
-        << returnReduce(map().nOldCells(), sumOp<label>())
-        << " to " << globalData().nTotalCells() << " cells."
-        << endl;
+    // Info of unrefinement operation
+    const label nCellsBefore = returnReduce(map().nOldCells(), sumOp<label>());
+    const label nCellsAfter = globalData().nTotalCells();
+
+    Info<< "Unrefined from " << nCellsBefore
+        << " to " << nCellsAfter << " cells." << endl;
+
+    const label unrefinedCells = nCellsBefore - nCellsAfter;
+
+    DebugInfo<< "Unrefined cells: " << unrefinedCells << endl;
+
+    if (dumpRefinementInfo_)
+    {
+        setInfo("nTotUnrefined", unrefinedCells);
+    }
 
     // Update fields
     updateMesh(*map);
@@ -1217,11 +1228,6 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectUnrefinePoints
         << " split points out of a possible "
         << returnReduce(splitPoints.size(), sumOp<label>())
         << "." << endl;
-
-    if (dumpRefinementInfo_)
-    {
-        setInfo("nTotToUnrefine", nTot);
-    }
 
     return consistentSet;
 }
