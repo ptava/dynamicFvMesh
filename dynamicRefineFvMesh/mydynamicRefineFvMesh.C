@@ -1100,15 +1100,9 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
         )
     );
 
-
-    const scalar upperLimit = returnReduce(
-        allCellError[0],
-        maxOp<scalar>()
-    );
-    const scalar lowerLimit = returnReduce(
-        allCellError[candidates.size()-1],
-        minOp<scalar>()
-    );
+    const label nTotCandidates = returnReduce(candidates.size(), sumOp<label>());
+    const scalar upperLimit = allCellError[0];
+    const scalar lowerLimit = allCellError[nTotCandidates-1];
 
     DebugInfo<< "Refinement level range: "
         << "[" << lowerLimit << " - " << upperLimit << "]" << endl;
