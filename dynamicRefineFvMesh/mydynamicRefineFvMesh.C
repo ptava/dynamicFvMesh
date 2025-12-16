@@ -575,6 +575,9 @@ Foam::mydynamicRefineFvMesh::refine
     // Update numbering of cells/vertices.
     meshCutter_.updateMesh(*map);
 
+    // Refresh cached split points after refinement
+    splitPoints_ = meshCutter_.getSplitPoints();
+
     // Update numbering of protectedCell_
     if (protectedCell_.size())
     {
@@ -655,13 +658,38 @@ Foam::mydynamicRefineFvMesh::unrefine
     Info<< "Unrefined from " << nCellsBefore
         << " to " << nCellsAfter << " cells." << endl;
 
-    const label unrefinedCells = nCellsBefore - nCellsAfter;
+    const label nUnrefinedCells = nCellsBefore - nCellsAfter;
 
-    DebugInfo<< "Unrefined cells: " << unrefinedCells << endl;
+    DebugInfo<< "Unrefined cells: " << nUnrefinedCells << endl;
 
     if (dumpRefinementInfo_)
     {
-        setInfo("nTotUnrefined", unrefinedCells);
+        setInfo("nTotUnrefined", nUnrefinedCells);
+
+        // Store the identifiers of cells removed by unrefinement
+        const labelList& reverseCellMap = map().reverseCellMap();
+        bitSet cellMask(reverseCellMap.size());
+
+        forAll(reverseCellMap, oldCelli)
+        {
+            if (reverseCellMap[oldCelli] < 0)
+            {
+                cellMask.set(oldCelli);
+            }
+        }
+
+        labelList unrefinedCells(cellMask.toc());
+
+        setDumpList<&mydynamicRefineFvMesh::unrefinedCells_>
+        (
+            unrefinedCells,
+            "unrefinedCells"
+        );
+
+        DebugInfo
+            << "Unrefined cells set size: "
+            << returnReduce(unrefinedCells_->size(), sumOp<label>())
+            << endl;
     }
 
     // Update fields
@@ -1126,9 +1154,25 @@ Foam::labelList Foam::mydynamicRefineFvMesh::selectRefineCells
 
     if (dumpRefinementInfo_)
     {
+        // Store sclars/labels
         setInfo("nTotRefined", nTot);
         setInfo("upperLimit", upperLimit);
         setInfo("lowerLimit", lowerLimit);
+
+        // Store list
+        setDumpList<&mydynamicRefineFvMesh::refinedCells_>
+        (
+            consistentSet,
+            "refinedCells"
+        );
+
+        DebugInfo
+            << "Refined cells: "
+            << nTot << endl;
+        DebugInfo
+            << "Refined cells set size: "
+            << returnReduce(refinedCells_->size(), sumOp<label>())
+            << endl;
     }
 
     return consistentSet;

@@ -218,7 +218,8 @@ inline void Foam::mydynamicRefineFvMesh::setInfo
 }
 
 template<Foam::autoPtr<Foam::volScalarField> Foam::mydynamicRefineFvMesh::* MemberPtr>
-inline void Foam::mydynamicRefineFvMesh::setDumpField(
+inline void Foam::mydynamicRefineFvMesh::setDumpField
+(
     const scalarField& vals,
     const word& name
 ) const
@@ -242,5 +243,34 @@ inline void Foam::mydynamicRefineFvMesh::setDumpField(
 
     // Assign internal values
     fld->primitiveFieldRef() = vals;
+}
+
+template<Foam::autoPtr<Foam::labelIOList> Foam::mydynamicRefineFvMesh::* MemberPtr>
+inline void Foam::mydynamicRefineFvMesh::setDumpList
+(
+    const labelList& vals,
+    const word& name
+) const
+{
+    // Resolve member pointer to actual autoPtr
+    autoPtr<labelIOList>& lst = const_cast<autoPtr<labelIOList>&>(
+        this->*MemberPtr
+    );
+
+    lst.reset
+    (
+        new labelIOList
+        (
+            IOobject
+            (
+                name,
+                time().timeName(),
+                thisDb(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            vals.size()
+        )
+    );
 }
 // ************************************************************************* //

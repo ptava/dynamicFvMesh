@@ -95,6 +95,7 @@ SourceFiles
 #include "bitSet.H"
 #include "SortableList.H"
 #include "Function1.H"
+#include "labelIOList.H"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -131,6 +132,12 @@ protected:
         //  "cellError", number of selected cells
         bool dumpRefinementInfo_;
 
+        //- List of cells selected for refinement (after 2:1 consistency)
+        mutable autoPtr<labelIOList> refinedCells_;
+
+        //- List of cells selected for unrefinement (after 2:1 consistency)
+        mutable autoPtr<labelIOList> unrefinedCells_;
+
         //- cellError before smoothing
         mutable autoPtr<volScalarField> cellError_;
 
@@ -150,7 +157,8 @@ protected:
         //- Read the projection parameters from dictionary
         void readDict();
 
-        //- Initialise fields for dumping refinement information
+        //- Initialise fields for dumping refinement information (matching
+        //  current mesh size before overwrite)
         void makeDumpField
         (
             autoPtr<volScalarField>& fld,
@@ -166,9 +174,17 @@ protected:
         ) const;
 
         template<class T>
-        inline void setInfo(
+        inline void setInfo
+        (
             const word& name,
             const T& value
+        ) const;
+
+        template<autoPtr<labelIOList> mydynamicRefineFvMesh::* MemberPtr>
+        inline void setDumpList
+        (
+            const labelList& vals,
+            const word& name
         ) const;
 
         // Current scale value
